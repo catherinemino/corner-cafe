@@ -42,8 +42,42 @@ async function dbSet(key, value) {
   await supabase.from("cafe_store").upsert({ key, value, updated_at: new Date().toISOString() });
 }
 
-// ── Helpers ───────────────────────────────────────────────────
-function getWeekLabel(offset) {
+// ── Google Calendar link builder ─────────────────────────────
+function makeCalendarLink(weekOffset, day, shift) {
+  // Parse start/end times from shift name e.g. "Flex (9:50–10:35am)"
+  const timeMatch = shift.match(/(\d+:\d+)\s*[–-]\s*(\d+:\d+\s*(?:am|pm)?)/i);
+
+  // Get the actual date for this day in the given week
+  const now = new Date();
+  const currentDay = now.getDay();
+  const diff = now.getDate() - currentDay + (currentDay === 0 ? -6 : 1);
+  const monday = new Date(now); monday.setDate(diff + weekOffset * 7);
+  const dayIndex = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"].indexOf(day);
+  const shiftDate = new Date(monday); shiftDate.setDate(monday.getDate() + dayIndex);
+
+  const pad = n => String(n).padStart(2, "0");
+  const dateStr = `${shiftDate.getFullYear()}${pad(shiftDate.getMonth()+1)}${pad(shiftDate.getDate())}`;
+
+  let startStr = `${dateStr}T090000`;
+  let endStr   = `${dateStr}T100000`;
+
+  if (timeMatch) {
+    const parseTime = (t, hint) => {
+      let [h, m] = t.trim().split(":").map(Number);
+      const isPM = /pm/i.test(hint || t);
+      const isAM = /am/i.test(hint || t);
+      if (isPM && h !== 12) h += 12;
+      if (isAM && h === 12) h = 0;
+      return `${dateStr}T${pad(h)}${pad(m)}00`;
+    };
+    startStr = parseTime(timeMatch[1], shift);
+    endStr   = parseTime(timeMatch[2], shift);
+  }
+
+  const title = encodeURIComponent(`Corner Cafe — ${shift}`);
+  const details = encodeURIComponent(`Shift signed up via Corner Cafe scheduler`);
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startStr}/${endStr}&details=${details}`;
+}
   const now = new Date();
   const day = now.getDay();
   const diff = now.getDate() - day + (day === 0 ? -6 : 1);
@@ -328,7 +362,11 @@ export default function CornerCafe() {
                             <div style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:13,color:C.white}}>{day}</div>
                             <div style={{fontFamily:"'DM Sans',sans-serif",fontSize:12,color:C.soft,marginTop:2}}>{shift}</div>
                           </div>
-                          <span className={`tag ${verified?"tag-g":"tag-y"}`}>{verified?"verified ✓":"pending"}</span>
+                          <div style={{display:"flex",alignItems:"center",gap:8}}>
+                            <a href={makeCalendarLink(weekOffset, day, shift)} target="_blank" rel="noreferrer"
+                              style={{fontSize:16,textDecoration:"none"}} title="Add to Google Calendar">📅</a>
+                            <span className={`tag ${verified?"tag-g":"tag-y"}`}>{verified?"verified ✓":"pending"}</span>
+                          </div>
                         </div>
                       );
                     })}
@@ -660,7 +698,15 @@ export default function CornerCafe() {
                               ))}
                               <div style={{marginTop:10}}>
                                 {mine
-                                  ? <button onClick={()=>cancelSignup(day,shift)} className="btn btn-ghost" style={{width:"100%",fontSize:12,padding:"7px"}}>cancel</button>
+                                  ? <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                                      <a href={makeCalendarLink(weekOffset, day, shift)} target="_blank" rel="noreferrer"
+                                        style={{display:"block",textAlign:"center",background:"rgba(255,210,0,0.1)",border:`1.5px solid rgba(255,210,0,0.3)`,color:C.yellow,borderRadius:50,padding:"7px",fontSize:12,fontWeight:700,fontFamily:"'Syne',sans-serif",textDecoration:"none",transition:"all .2s"}}
+                                        onMouseEnter={e=>{e.target.style.background="rgba(255,210,0,0.2)";}}
+                                        onMouseLeave={e=>{e.target.style.background="rgba(255,210,0,0.1)";}}>
+                                        📅 add to google calendar
+                                      </a>
+                                      <button onClick={()=>cancelSignup(day,shift)} className="btn btn-ghost" style={{width:"100%",fontSize:12,padding:"7px"}}>cancel</button>
+                                    </div>
                                   : <button onClick={()=>signUp(day,shift)} className={`btn ${full?"btn-full":"btn-y"}`} disabled={!staffName||full} style={{width:"100%",fontSize:12,padding:"7px"}}>
                                       {full?"full":staffName?"sign up":"select name first"}
                                     </button>
