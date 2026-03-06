@@ -78,6 +78,8 @@ function makeCalendarLink(weekOffset, day, shift) {
   const details = encodeURIComponent(`Shift signed up via Corner Cafe scheduler`);
   return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startStr}/${endStr}&details=${details}`;
 }
+
+function getWeekLabel(offset) {
   const now = new Date();
   const day = now.getDay();
   const diff = now.getDate() - day + (day === 0 ? -6 : 1);
