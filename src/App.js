@@ -91,23 +91,26 @@ function getDayDate(weekOffset, dayName) {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-// ── Logo: coffee cup with xoxo ──────────────────────────────
+// ── Logo: simple xoxo in yellow circle ──────────────────────
 function CafeLogo({ size = 44 }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
-      {/* Yellow circle background */}
-      <circle cx="22" cy="22" r="21" fill={C.yellow} stroke={C.deep} strokeWidth="2"/>
-      {/* Cup body */}
-      <rect x="11" y="17" width="18" height="13" rx="2" fill={C.deep}/>
-      {/* Cup handle */}
-      <path d="M29 20 Q35 20 35 24 Q35 28 29 28" stroke={C.deep} strokeWidth="2.5" fill="none" strokeLinecap="round"/>
-      {/* Steam lines */}
-      <path d="M16 14 Q17 11 16 9" stroke={C.deep} strokeWidth="2" strokeLinecap="round"/>
-      <path d="M20 14 Q21 11 20 9" stroke={C.deep} strokeWidth="2" strokeLinecap="round"/>
-      <path d="M24 14 Q25 11 24 9" stroke={C.deep} strokeWidth="2" strokeLinecap="round"/>
-      {/* xoxo text on cup */}
-      <text x="12" y="27" fontFamily="'Syne',sans-serif" fontWeight="800" fontSize="7" fill={C.yellow} letterSpacing="0.5">xoxo</text>
-    </svg>
+    <div style={{
+      width: size, height: size, borderRadius: "50%",
+      background: C.yellow, display: "flex", alignItems: "center",
+      justifyContent: "center", flexShrink: 0,
+      border: `3px solid ${C.deep}`,
+      boxShadow: `3px 3px 0 ${C.deep}`,
+    }}>
+      <span style={{
+        fontFamily: "'Syne', sans-serif",
+        fontWeight: 800,
+        fontSize: Math.round(size * 0.32),
+        color: C.deep,
+        letterSpacing: "-1.5px",
+        lineHeight: 1,
+        userSelect: "none",
+      }}>xoxo</span>
+    </div>
   );
 }
 
@@ -723,9 +726,10 @@ export default function CornerCafe() {
               <button className="week-btn" onClick={()=>setWeekOffset(o=>o+1)}>next week →</button>
             </div>
 
-            {/* Day cards — Mon–Fri only */}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(250px,1fr))",gap:14}}>
-              {DISPLAY_DAYS.map((day, di) => {
+            {/* Day cards — Mon–Wed row, then Thu–Fri row */}
+            {[["Monday","Tuesday","Wednesday"],["Thursday","Friday"]].map((rowDays, rowIdx) => (
+              <div key={rowIdx} style={{display:"grid",gridTemplateColumns:`repeat(${rowDays.length}, 1fr)`,gap:14,marginBottom:14}}>
+                {rowDays.map((day, di) => {
                 const dayShifts = shifts[day] || [];
                 const dateLabel = getDayDate(weekOffset, day);
                 return (
@@ -778,7 +782,7 @@ export default function CornerCafe() {
                                       </a>
                                       <button onClick={()=>cancelSignup(day,shift)} className="btn btn-ghost" style={{width:"100%",fontSize:11,padding:"7px"}}>cancel signup</button>
                                     </div>
-                                  : <button onClick={()=>signUp(day,shift)} className={`btn ${full?"btn-full":"btn-y"}`} disabled={!staffName||full} style={{width:"100%",fontSize:12,padding:"9px"}}>
+                                  : <button onClick={()=>signUp(day,shift)} className={`btn ${full?"btn-full":"btn-y"}`} disabled={!staffName||full} style={{width:"100%",fontSize:full||staffName?12:9,padding:"9px"}}>
                                       {full ? "shift full" : staffName ? "sign up ✦" : "pick your name first"}
                                     </button>
                                 }
@@ -790,7 +794,8 @@ export default function CornerCafe() {
                   </div>
                 );
               })}
-            </div>
+              </div>
+            ))}
           </div>
         )}
       </main>
