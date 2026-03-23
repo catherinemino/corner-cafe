@@ -42,47 +42,15 @@ async function dbSet(key, value) {
   await supabase.from("cafe_store").upsert({ key, value, updated_at: new Date().toISOString() });
 }
 
-function makeCalendarLink(weekOffset, day, shift) {
-  const now = new Date();
-  const currentDay = now.getDay();
-  const diff = now.getDate() - currentDay + (currentDay === 0 ? -6 : 1);
-  const monday = new Date(now); monday.setDate(diff + weekOffset * 7);
-  const dayIndex = DAYS.indexOf(day);
-  const shiftDate = new Date(monday); shiftDate.setDate(monday.getDate() + dayIndex);
-  const pad = n => String(n).padStart(2, "0");
-  const dateStr = `${shiftDate.getFullYear()}${pad(shiftDate.getMonth()+1)}${pad(shiftDate.getDate())}`;
-  let startStr, endStr;
-  const lower = shift.toLowerCase();
-  if (lower.includes("flex")) {
-    startStr = `${dateStr}T095000`; endStr = `${dateStr}T103500`;
-  } else if (lower.includes("lunch")) {
-    startStr = `${dateStr}T115000`; endStr = `${dateStr}T123500`;
-  } else {
-    const m = shift.match(/(\d+):(\d+)\s*[–-]\s*(\d+):(\d+)\s*(am|pm)?/i);
-    if (m) {
-      let [,sh,sm,eh,em,mer] = m;
-      sh=parseInt(sh); sm=parseInt(sm); eh=parseInt(eh); em=parseInt(em);
-      if (/pm/i.test(mer||shift) && sh!==12) sh+=12;
-      if (/pm/i.test(mer||shift) && eh!==12) eh+=12;
-      startStr=`${dateStr}T${pad(sh)}${pad(sm)}00`; endStr=`${dateStr}T${pad(eh)}${pad(em)}00`;
-    } else { startStr=`${dateStr}T090000`; endStr=`${dateStr}T100000`; }
-  }
-  const title = encodeURIComponent(`Corner Cafe — ${shift}`);
-  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startStr}/${endStr}`;
-}
-
-// Get the Monday Date object for a given week offset (0 = this week)
-// Uses local date arithmetic only — no UTC conversion that causes timezone shifts
+// Get the Monday of the week for a given offset (0 = this week)
 function getMondayForOffset(offset) {
   const now = new Date();
   const dow = now.getDay(); // 0=Sun, 1=Mon ... 6=Sat
-  // Days since last Monday (treat Sunday as 7 so we go back to previous Mon)
   const daysSinceMonday = dow === 0 ? 6 : dow - 1;
-  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysSinceMonday + offset * 7);
-  return monday;
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysSinceMonday + offset * 7);
 }
 
-// Stable week key: "week_YYYY-MM-DD" using the Monday's date
+// Week key format: "week_YYYY-MM-DD" based on the Monday date
 function getWeekKey(offset) {
   const m = getMondayForOffset(offset);
   const pad = n => String(n).padStart(2, "0");
@@ -98,12 +66,30 @@ function getWeekLabel(offset) {
 
 function getDayDate(weekOffset, dayName) {
   const monday = getMondayForOffset(weekOffset);
-  const dayIndex = DAYS.indexOf(dayName); // Mon=0 ... Sun=6
+  const dayIndex = DAYS.indexOf(dayName);
   const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + dayIndex);
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-// ── Logo: simple xoxo in yellow circle ──────────────────────
+function makeCalendarLink(weekOffset, day, shift) {
+  const monday = getMondayForOffset(weekOffset);
+  const dayIndex = DAYS.indexOf(day);
+  const shiftDate = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + dayIndex);
+  const pad = n => String(n).padStart(2, "0");
+  const dateStr = `${shiftDate.getFullYear()}${pad(shiftDate.getMonth()+1)}${pad(shiftDate.getDate())}`;
+  let startStr, endStr;
+  const lower = shift.toLowerCase();
+  if (lower.includes("flex")) {
+    startStr = `${dateStr}T095000`; endStr = `${dateStr}T103500`;
+  } else if (lower.includes("lunch")) {
+    startStr = `${dateStr}T115000`; endStr = `${dateStr}T123500`;
+  } else {
+    startStr = `${dateStr}T090000`; endStr = `${dateStr}T100000`;
+  }
+  const title = encodeURIComponent(`Corner Cafe — ${shift}`);
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startStr}/${endStr}`;
+}
+
 function CafeLogo({ size = 44 }) {
   return (
     <div style={{
@@ -114,30 +100,21 @@ function CafeLogo({ size = 44 }) {
       boxShadow: `3px 3px 0 ${C.deep}`,
     }}>
       <span style={{
-        fontFamily: "'Syne', sans-serif",
-        fontWeight: 800,
-        fontSize: Math.round(size * 0.32),
-        color: C.deep,
-        letterSpacing: "-1.5px",
-        lineHeight: 1,
-        userSelect: "none",
+        fontFamily: "'Syne', sans-serif", fontWeight: 800,
+        fontSize: Math.round(size * 0.32), color: C.deep,
+        letterSpacing: "-1.5px", lineHeight: 1, userSelect: "none",
       }}>xoxo</span>
     </div>
   );
 }
 
-// ── Full-width checkerboard using CSS repeating-conic-gradient ──
 function Checkers({ c1 = C.yellow, c2 = C.deep, size = 16, opacity = 1 }) {
   return (
     <div style={{
-      width: "100vw",
-      marginLeft: "calc(-50vw + 50%)",
-      height: size * 2,
-      opacity,
-      flexShrink: 0,
+      width: "100vw", marginLeft: "calc(-50vw + 50%)",
+      height: size * 2, opacity, flexShrink: 0,
       backgroundImage: `repeating-conic-gradient(${c1} 0% 25%, ${c2} 0% 50%)`,
       backgroundSize: `${size * 2}px ${size * 2}px`,
-      backgroundPosition: "0 0",
     }}/>
   );
 }
@@ -266,23 +243,21 @@ export default function CornerCafe() {
     saveShiftsConfig(nc);
   };
 
-  const weekKeyToMonth = wk => {
-    // Key format: "week_YYYY-MM-DD"
-    const datePart = wk.replace("week_", "");
-    const [y, mo] = datePart.split("-");
-    return `${y}-${mo}`;
-  };
-
   const getMonthlyTally = () => {
     const byMonth = {};
     const allTimeMonths = new Set();
     Object.entries(data).forEach(([wk, wd]) => {
-      const month = weekKeyToMonth(wk);
-      allTimeMonths.add(month);
-      if (!byMonth[month]) byMonth[month] = {};
-      Object.values(wd).forEach(dd => Object.values(dd).forEach(ss => ss.forEach(s => {
-        if (s.verified) byMonth[month][s.name] = (byMonth[month][s.name] || 0) + 1;
-      })));
+      // Parse month from key format "week_YYYY-MM-DD"
+      const datePart = wk.replace("week_", "");
+      const parts = datePart.split("-");
+      if (parts.length >= 2) {
+        const month = `${parts[0]}-${parts[1]}`;
+        allTimeMonths.add(month);
+        if (!byMonth[month]) byMonth[month] = {};
+        Object.values(wd).forEach(dd => Object.values(dd).forEach(ss => ss.forEach(s => {
+          if (s.verified) byMonth[month][s.name] = (byMonth[month][s.name] || 0) + 1;
+        })));
+      }
     });
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
@@ -305,7 +280,6 @@ export default function CornerCafe() {
 
   const shifts = getShifts(weekKey);
 
-  // ── Done modal content ──
   const DoneModal = () => {
     const myShifts = [];
     DISPLAY_DAYS.forEach(day => {
@@ -314,20 +288,14 @@ export default function CornerCafe() {
           myShifts.push({ day, shift });
       });
     });
-    const closeDone = () => {
-      setShowDone(false);
-      setStaffName("");
-      setNameInput("");
-    };
+    const closeDone = () => { setShowDone(false); setStaffName(""); setNameInput(""); };
     return (
       <div className="overlay" onClick={closeDone}>
         <div className="modal" onClick={e => e.stopPropagation()}>
           <Checkers c1={C.yellow} c2={C.deep} size={13}/>
           <div className="modal-body">
             <div style={{textAlign:"center",marginBottom:20}}>
-              <div style={{display:"flex",justifyContent:"center",marginBottom:12}}>
-                <CafeLogo size={52}/>
-              </div>
+              <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><CafeLogo size={52}/></div>
               <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:26,color:C.white,marginBottom:4}}>you're all set!</div>
               <div style={{color:C.soft,fontSize:13,fontFamily:"'DM Sans',sans-serif"}}>{getWeekLabel(weekOffset)}</div>
             </div>
@@ -345,8 +313,7 @@ export default function CornerCafe() {
                           <div style={{fontFamily:"'DM Sans',sans-serif",fontSize:12,color:C.soft,marginTop:2}}>{shift}</div>
                         </div>
                         <div style={{display:"flex",alignItems:"center",gap:8}}>
-                          <a href={makeCalendarLink(weekOffset, day, shift)} target="_blank" rel="noreferrer"
-                            style={{fontSize:18,textDecoration:"none",lineHeight:1}}>📅</a>
+                          <a href={makeCalendarLink(weekOffset, day, shift)} target="_blank" rel="noreferrer" style={{fontSize:18,textDecoration:"none",lineHeight:1}}>📅</a>
                           <span className={`tag ${verified ? "tag-g" : "tag-y"}`}>{verified ? "verified" : "pending"}</span>
                         </div>
                       </div>
@@ -354,9 +321,7 @@ export default function CornerCafe() {
                   })}
                 </div>
             }
-            <button onClick={closeDone} className="btn btn-y" style={{width:"100%",fontSize:13,padding:13}}>
-              done ✓
-            </button>
+            <button onClick={closeDone} className="btn btn-y" style={{width:"100%",fontSize:13,padding:13}}>done ✓</button>
           </div>
         </div>
       </div>
@@ -374,20 +339,15 @@ export default function CornerCafe() {
         @keyframes up{from{opacity:0;transform:translateY(18px);}to{opacity:1;transform:translateY(0);}}
         @keyframes toastPop{from{opacity:0;transform:translateY(10px) scale(.93);}to{opacity:1;transform:translateY(0) scale(1);}}
         @keyframes pulse{0%,100%{opacity:.4;}50%{opacity:1;}}
-        @keyframes wiggle{0%,100%{transform:rotate(-4deg);}50%{transform:rotate(4deg);}}
         .page{animation:up .3s ease both;}
-
         .nav-pill{background:transparent;border:2px solid rgba(242,187,242,0.3);color:${C.soft};cursor:pointer;font-family:'Syne',sans-serif;font-weight:800;font-size:12px;padding:7px 16px;border-radius:6px;transition:all .18s;white-space:nowrap;text-transform:uppercase;letter-spacing:.5px;}
         .nav-pill:hover{border-color:${C.yellow};color:${C.yellow};}
         .nav-pill.on{background:${C.yellow};border-color:${C.yellow};color:${C.deep};}
-
         .glass{background:rgba(255,255,255,0.05);border:2px solid rgba(242,187,242,0.15);border-radius:16px;transition:border-color .2s;}
         .glass:hover{border-color:rgba(242,187,242,0.3);}
-
         .shift-block{background:rgba(255,255,255,0.04);border:2px solid rgba(242,187,242,0.12);border-radius:12px;padding:14px;margin-bottom:10px;transition:all .18s;}
         .shift-block:hover{border-color:rgba(242,187,242,0.28);}
         .shift-block.mine{border-color:${C.yellow};background:rgba(255,210,0,0.06);}
-
         .btn{border:none;border-radius:6px;padding:10px 22px;cursor:pointer;font-family:'Syne',sans-serif;font-weight:800;font-size:12px;transition:all .18s;white-space:nowrap;text-transform:uppercase;letter-spacing:.5px;}
         .btn:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.3);}
         .btn:active:not(:disabled){transform:translateY(0);}
@@ -396,45 +356,36 @@ export default function CornerCafe() {
         .btn-ghost{background:transparent;color:${C.lilac};border:2px solid rgba(242,187,242,0.3);}
         .btn-full{background:rgba(255,255,255,0.05);color:${C.soft};border:2px solid rgba(255,255,255,0.08);}
         .btn-danger{background:rgba(255,90,110,.15);color:#ff8096;border:2px solid rgba(255,90,110,.3);}
-
         .field{background:rgba(255,255,255,0.07);border:2px solid rgba(242,187,242,0.25);color:${C.white};padding:11px 18px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:14px;outline:none;transition:border-color .2s;width:100%;}
         .field::placeholder{color:rgba(242,187,242,0.35);}
         .field:focus{border-color:${C.yellow};}
         .field option{background:${C.deep};color:${C.white};}
-
         .week-btn{background:rgba(255,255,255,0.06);border:2px solid rgba(242,187,242,0.2);color:${C.soft};padding:6px 14px;border-radius:6px;cursor:pointer;font-family:'Syne',sans-serif;font-weight:800;font-size:11px;transition:all .18s;text-transform:uppercase;letter-spacing:.5px;}
         .week-btn:hover{border-color:${C.yellow};color:${C.yellow};}
-
         .adm-input{background:rgba(255,255,255,0.06);border:2px solid rgba(242,187,242,0.18);color:${C.white};padding:7px 12px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:12px;flex:1;outline:none;}
         .adm-input:focus{border-color:${C.yellow};}
-
         .overlay{position:fixed;inset:0;background:rgba(5,0,20,.82);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:100;animation:up .2s ease;}
         .modal{background:#1a0b38;border:2px solid rgba(242,187,242,0.2);border-radius:20px;max-width:400px;width:92%;box-shadow:0 30px 80px rgba(0,0,0,.6);overflow:hidden;}
         .modal-body{padding:28px 28px 30px;}
-
         .dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0;}
         .tag{display:inline-flex;align-items:center;padding:3px 10px;border-radius:4px;font-size:10px;font-weight:800;font-family:'Syne',sans-serif;letter-spacing:.5px;text-transform:uppercase;}
         .tag-y{background:rgba(255,210,0,0.18);color:${C.yellow};}
         .tag-g{background:rgba(114,255,168,0.12);color:${C.green};}
         .person-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.06);}
         .person-row:last-child{border-bottom:none;}
-
         .hero-select{background:rgba(255,255,255,0.07);border:2px solid rgba(242,187,242,0.3);color:${C.white};padding:14px 46px 14px 20px;border-radius:8px;font-family:'Syne',sans-serif;font-size:15px;font-weight:700;outline:none;cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 12 12'%3E%3Cpath fill='%23f2bbf2' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 16px center;transition:border-color .2s;width:100%;max-width:340px;}
         .hero-select:focus{border-color:${C.yellow};}
         .hero-select option{background:${C.deep};color:${C.white};}
       `}</style>
 
-      {/* Toast */}
       {toast && (
         <div style={{position:"fixed",bottom:24,right:20,zIndex:200,background:toast.yellow?C.yellow:C.lilac,color:C.deep,padding:"10px 22px",borderRadius:6,fontWeight:800,fontSize:12,fontFamily:"'Syne',sans-serif",boxShadow:"0 8px 30px rgba(0,0,0,.4)",animation:"toastPop .25s ease",letterSpacing:.5,textTransform:"uppercase"}}>
           {toast.msg}
         </div>
       )}
 
-      {/* Done modal */}
       {showDone && <DoneModal/>}
 
-      {/* Confirm remove modal */}
       {confirmRemove && (
         <div className="overlay" onClick={()=>setConfirmRemove(null)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
@@ -453,7 +404,6 @@ export default function CornerCafe() {
         </div>
       )}
 
-      {/* ── Header ── */}
       <header style={{background:C.deep,borderBottom:`2px solid rgba(242,187,242,0.1)`,position:"relative",zIndex:10}}>
         <div style={{padding:"14px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
@@ -482,7 +432,6 @@ export default function CornerCafe() {
 
       <main style={{maxWidth:1200,margin:"0 auto",padding:"28px 16px",position:"relative"}}>
 
-        {/* ── LOGIN ── */}
         {view==="login" && (
           <div className="page" style={{maxWidth:400,margin:"60px auto"}}>
             <div className="glass" style={{overflow:"hidden"}}>
@@ -507,7 +456,6 @@ export default function CornerCafe() {
           </div>
         )}
 
-        {/* ── LEADERBOARD ── */}
         {view==="stats" && (()=>{
           const { months, byMonth, allNames } = getMonthlyTally();
           const fmtMonth = m => { const [y,mo]=m.split("-"); return new Date(y,mo-1).toLocaleDateString("en-US",{month:"long",year:"numeric"}); };
@@ -522,7 +470,7 @@ export default function CornerCafe() {
               </div>
               <div className="glass" style={{overflow:"hidden",padding:0}}>
                 <div style={{overflowX:"auto"}}>
-                  <table style={{width:"100%",minWidth:months.length>1?520:320,borderCollapse:"collapse"}}>
+                  <table style={{width:"100%",minWidth:320,borderCollapse:"collapse"}}>
                     <thead>
                       <tr style={{background:"rgba(0,0,0,0.4)"}}>
                         <th style={{textAlign:"left",padding:"13px 16px",fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:11,color:C.soft,textTransform:"uppercase",letterSpacing:.5}}>#</th>
@@ -572,7 +520,6 @@ export default function CornerCafe() {
           );
         })()}
 
-        {/* ── ADMIN ── */}
         {view==="admin" && isAdmin && (
           <div className="page">
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:14,marginBottom:22}}>
@@ -583,8 +530,6 @@ export default function CornerCafe() {
                 <button className="week-btn" onClick={()=>setWeekOffset(o=>o+1)}>next →</button>
               </div>
             </div>
-
-            {/* Staff list */}
             <div style={{marginBottom:22}}>
               <div className="glass" style={{padding:18}}>
                 <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:13,color:C.white,marginBottom:14,display:"flex",alignItems:"center",gap:10,textTransform:"uppercase",letterSpacing:.5}}>
@@ -610,7 +555,6 @@ export default function CornerCafe() {
                 </div>
               </div>
             </div>
-
             <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:10,color:C.soft,marginBottom:14,letterSpacing:2,textTransform:"uppercase"}}>weekly shifts — {getWeekLabel(weekOffset)}</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>
               {DAYS.map(day=>{
@@ -626,11 +570,8 @@ export default function CornerCafe() {
                       <div style={{display:"flex",alignItems:"center",gap:7}}>
                         <span style={{color:C.purple,fontSize:10,fontWeight:700,textTransform:"uppercase"}}>{dayShifts.length} shifts</span>
                         {dayShifts.length>0&&(
-                          <button onClick={()=>{
-                            const cur=getShifts(weekKey);const nc=JSON.parse(JSON.stringify(shiftsConfig));
-                            if(!nc[weekKey])nc[weekKey]=JSON.parse(JSON.stringify(cur));
-                            nc[weekKey][day]=[];saveShiftsConfig(nc);showToast(`${day} closed`,false);
-                          }} style={{background:"rgba(255,90,110,0.1)",border:`2px solid rgba(255,90,110,0.25)`,color:"#ff8096",borderRadius:4,padding:"2px 8px",cursor:"pointer",fontSize:10,fontWeight:800,fontFamily:"'Syne',sans-serif",textTransform:"uppercase"}}>close</button>
+                          <button onClick={()=>{const cur=getShifts(weekKey);const nc=JSON.parse(JSON.stringify(shiftsConfig));if(!nc[weekKey])nc[weekKey]=JSON.parse(JSON.stringify(cur));nc[weekKey][day]=[];saveShiftsConfig(nc);showToast(`${day} closed`,false);}}
+                            style={{background:"rgba(255,90,110,0.1)",border:`2px solid rgba(255,90,110,0.25)`,color:"#ff8096",borderRadius:4,padding:"2px 8px",cursor:"pointer",fontSize:10,fontWeight:800,fontFamily:"'Syne',sans-serif",textTransform:"uppercase"}}>close</button>
                         )}
                       </div>
                     </div>
@@ -665,11 +606,8 @@ export default function CornerCafe() {
                       + add shift
                     </button>
                     {day==="Friday"&&!dayShifts.includes("Unpacking")&&(
-                      <button onClick={()=>{
-                        const cur=getShifts(weekKey);const nc=JSON.parse(JSON.stringify(shiftsConfig));
-                        if(!nc[weekKey])nc[weekKey]=JSON.parse(JSON.stringify(cur));
-                        nc[weekKey]["Friday"].push("Unpacking");saveShiftsConfig(nc);showToast("unpacking added");
-                      }} className="btn btn-y" style={{width:"100%",fontSize:11,padding:"8px",marginTop:6}}>
+                      <button onClick={()=>{const cur=getShifts(weekKey);const nc=JSON.parse(JSON.stringify(shiftsConfig));if(!nc[weekKey])nc[weekKey]=JSON.parse(JSON.stringify(cur));nc[weekKey]["Friday"].push("Unpacking");saveShiftsConfig(nc);showToast("unpacking added");}}
+                        className="btn btn-y" style={{width:"100%",fontSize:11,padding:"8px",marginTop:6}}>
                         + unpacking shift 📦
                       </button>
                     )}
@@ -680,30 +618,21 @@ export default function CornerCafe() {
           </div>
         )}
 
-        {/* ── CALENDAR ── */}
         {view==="calendar" && (
           <div className="page">
-
-            {/* Hero name picker — shown when no name selected */}
             {!staffName && (
               <div style={{marginBottom:26}}>
                 <div className="glass" style={{overflow:"hidden"}}>
                   <Checkers c1={C.yellow} c2={C.deep} size={16}/>
                   <div style={{padding:"36px 28px",textAlign:"center"}}>
-                    <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:34,color:C.white,marginBottom:8,lineHeight:1.1}}>
-                      hey! who are you? 👋
-                    </div>
-                    <div style={{color:C.soft,fontSize:15,fontFamily:"'DM Sans',sans-serif",marginBottom:28}}>
-                      pick your name to sign up for shifts this week
-                    </div>
+                    <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:34,color:C.white,marginBottom:8,lineHeight:1.1}}>hey! who are you? 👋</div>
+                    <div style={{color:C.soft,fontSize:15,fontFamily:"'DM Sans',sans-serif",marginBottom:28}}>pick your name to sign up for shifts this week</div>
                     {staffList.length===0
                       ? <div style={{color:C.soft,fontSize:13,fontFamily:"'DM Sans',sans-serif",fontStyle:"italic"}}>no staff added yet — ask your admin</div>
                       : <div style={{display:"flex",gap:12,justifyContent:"center",alignItems:"center",flexWrap:"wrap"}}>
                           <select className="hero-select" value={nameInput} onChange={e=>setNameInput(e.target.value)}>
                             <option value="">select your name ▾</option>
-                            {[...staffList].sort().map(n=>(
-                              <option key={n} value={n}>{n}</option>
-                            ))}
+                            {[...staffList].sort().map(n=>(<option key={n} value={n}>{n}</option>))}
                           </select>
                           <button onClick={()=>nameInput&&setStaffName(nameInput)} className="btn btn-y" disabled={!nameInput}
                             style={{fontSize:15,padding:"14px 30px",boxShadow:`0 0 28px rgba(255,210,0,0.3)`}}>
@@ -717,7 +646,6 @@ export default function CornerCafe() {
               </div>
             )}
 
-            {/* Signed-in top bar */}
             {staffName && (
               <div className="glass" style={{padding:"13px 18px",marginBottom:20,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
                 <div style={{background:C.yellow,color:C.deep,borderRadius:6,padding:"6px 16px",fontWeight:800,fontSize:13,fontFamily:"'Syne',sans-serif",flexShrink:0,textTransform:"uppercase"}}>{staffName}</div>
@@ -729,88 +657,79 @@ export default function CornerCafe() {
               </div>
             )}
 
-            {/* Week nav */}
             <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:20,flexWrap:"wrap"}}>
               <button className="week-btn" onClick={()=>setWeekOffset(o=>o-1)}>← prev week</button>
               <div style={{background:"rgba(255,255,255,0.08)",border:`2px solid rgba(242,187,242,0.2)`,borderRadius:6,padding:"7px 16px",fontSize:11,fontWeight:800,color:C.lilac,fontFamily:"'Syne',sans-serif",textTransform:"uppercase",letterSpacing:.5,whiteSpace:"nowrap"}}>{getWeekLabel(weekOffset)}</div>
               <button className="week-btn" onClick={()=>setWeekOffset(o=>o+1)}>next week →</button>
             </div>
 
-            {/* Day cards — Mon–Wed row, then Thu–Fri row */}
             {[["Monday","Tuesday","Wednesday"],["Thursday","Friday"]].map((rowDays, rowIdx) => (
               <div key={rowIdx} style={{display:"grid",gridTemplateColumns:`repeat(${rowDays.length}, 1fr)`,gap:14,marginBottom:14}}>
-                {rowDays.map((day, di) => {
-                const dayShifts = shifts[day] || [];
-                const dateLabel = getDayDate(weekOffset, day);
-                return (
-                  <div key={day} className="glass" style={{padding:18,animationDelay:`${di*.05}s`}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
-                      <div>
-                        <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:18,color:C.white,lineHeight:1}}>{day}</div>
-                        <div style={{fontSize:12,color:C.soft,marginTop:4,fontFamily:"'DM Sans',sans-serif"}}>{dateLabel}</div>
+                {rowDays.map((day) => {
+                  const dayShifts = shifts[day] || [];
+                  const dateLabel = getDayDate(weekOffset, day);
+                  return (
+                    <div key={day} className="glass" style={{padding:18}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
+                        <div>
+                          <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:18,color:C.white,lineHeight:1}}>{day}</div>
+                          <div style={{fontSize:12,color:C.soft,marginTop:4,fontFamily:"'DM Sans',sans-serif"}}>{dateLabel}</div>
+                        </div>
+                        <span style={{background:"rgba(242,187,242,0.1)",color:C.soft,borderRadius:4,padding:"2px 8px",fontSize:10,fontWeight:800,textTransform:"uppercase"}}>{dayShifts.length} shift{dayShifts.length!==1?"s":""}</span>
                       </div>
-                      <span style={{background:"rgba(242,187,242,0.1)",color:C.soft,borderRadius:4,padding:"2px 8px",fontSize:10,fontWeight:800,textTransform:"uppercase"}}>{dayShifts.length} shift{dayShifts.length!==1?"s":""}</span>
+                      {dayShifts.length === 0
+                        ? <div style={{background:"rgba(255,255,255,0.03)",borderRadius:8,padding:16,textAlign:"center",color:C.purple,fontSize:12,fontFamily:"'DM Sans',sans-serif"}}>no shifts this day</div>
+                        : dayShifts.map(shift => {
+                            const signups = getSignups(weekKey, day, shift);
+                            const full = signups.length >= MAX_PER_SHIFT;
+                            const mine = signups.some(s => s.name === staffName);
+                            return (
+                              <div key={shift} className={`shift-block${mine ? " mine" : ""}`}>
+                                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                                  <span style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:16,color:mine?C.yellow:C.lilac,lineHeight:1.2}}>{shift}</span>
+                                  <div style={{display:"flex",gap:3,flexShrink:0,marginLeft:8}}>
+                                    {Array.from({length:MAX_PER_SHIFT}).map((_,i)=>(
+                                      <span key={i} className="dot" style={{background:i<signups.length?(signups[i]?.verified?C.green:C.yellow):"rgba(255,255,255,0.1)"}}/>
+                                    ))}
+                                  </div>
+                                </div>
+                                {signups.map((s, si) => (
+                                  <div key={si} style={{display:"flex",alignItems:"center",gap:7,padding:"3px 0"}}>
+                                    <span className="dot" style={{background:s.verified?C.green:C.yellow}}/>
+                                    <span style={{fontSize:13,color:s.verified?C.green:C.white,fontFamily:"'DM Sans',sans-serif",fontWeight:s.name===staffName?700:400,flex:1}}>{s.name}</span>
+                                    {s.name===staffName&&!s.verified&&<span className="tag tag-y">you</span>}
+                                    {s.verified&&<span className="tag tag-g">✓</span>}
+                                  </div>
+                                ))}
+                                <div style={{marginTop:10}}>
+                                  {mine
+                                    ? <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                                        <a href={makeCalendarLink(weekOffset,day,shift)} target="_blank" rel="noreferrer"
+                                          style={{display:"block",textAlign:"center",background:"rgba(255,210,0,0.1)",border:`2px solid rgba(255,210,0,0.3)`,color:C.yellow,borderRadius:6,padding:"8px",fontSize:11,fontWeight:800,fontFamily:"'Syne',sans-serif",textDecoration:"none",transition:"all .18s",textTransform:"uppercase",letterSpacing:.4}}
+                                          onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,210,0,0.2)";}}
+                                          onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,210,0,0.1)";}}>
+                                          📅 add to google calendar
+                                        </a>
+                                        <button onClick={()=>cancelSignup(day,shift)} className="btn btn-ghost" style={{width:"100%",fontSize:11,padding:"7px"}}>cancel signup</button>
+                                      </div>
+                                    : <button onClick={()=>signUp(day,shift)} className={`btn ${full?"btn-full":"btn-y"}`} disabled={!staffName||full} style={{width:"100%",fontSize:!staffName?9:12,padding:"9px"}}>
+                                        {full ? "shift full" : staffName ? "sign up ✦" : "pick your name first"}
+                                      </button>
+                                  }
+                                </div>
+                              </div>
+                            );
+                          })
+                      }
                     </div>
-
-                    {dayShifts.length === 0
-                      ? <div style={{background:"rgba(255,255,255,0.03)",borderRadius:8,padding:16,textAlign:"center",color:C.purple,fontSize:12,fontFamily:"'DM Sans',sans-serif"}}>no shifts this day</div>
-                      : dayShifts.map(shift => {
-                          const signups = getSignups(weekKey, day, shift);
-                          const full = signups.length >= MAX_PER_SHIFT;
-                          const mine = signups.some(s => s.name === staffName);
-                          return (
-                            <div key={shift} className={`shift-block${mine ? " mine" : ""}`}>
-                              {/* Shift name — bigger */}
-                              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                                <span style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:16,color:mine?C.yellow:C.lilac,lineHeight:1.2}}>{shift}</span>
-                                <div style={{display:"flex",gap:3,flexShrink:0,marginLeft:8}}>
-                                  {Array.from({length:MAX_PER_SHIFT}).map((_,i)=>(
-                                    <span key={i} className="dot" style={{background:i<signups.length?(signups[i]?.verified?C.green:C.yellow):"rgba(255,255,255,0.1)"}}/>
-                                  ))}
-                                </div>
-                              </div>
-
-                              {/* Signups list */}
-                              {signups.map((s, si) => (
-                                <div key={si} style={{display:"flex",alignItems:"center",gap:7,padding:"3px 0"}}>
-                                  <span className="dot" style={{background:s.verified?C.green:C.yellow}}/>
-                                  <span style={{fontSize:13,color:s.verified?C.green:C.white,fontFamily:"'DM Sans',sans-serif",fontWeight:s.name===staffName?700:400,flex:1}}>{s.name}</span>
-                                  {s.name===staffName&&!s.verified&&<span className="tag tag-y">you</span>}
-                                  {s.verified&&<span className="tag tag-g">✓</span>}
-                                </div>
-                              ))}
-
-                              {/* Action button */}
-                              <div style={{marginTop:10}}>
-                                {mine
-                                  ? <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                                      <a href={makeCalendarLink(weekOffset,day,shift)} target="_blank" rel="noreferrer"
-                                        style={{display:"block",textAlign:"center",background:"rgba(255,210,0,0.1)",border:`2px solid rgba(255,210,0,0.3)`,color:C.yellow,borderRadius:6,padding:"8px",fontSize:11,fontWeight:800,fontFamily:"'Syne',sans-serif",textDecoration:"none",transition:"all .18s",textTransform:"uppercase",letterSpacing:.4}}
-                                        onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,210,0,0.2)";}}
-                                        onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,210,0,0.1)";}}>
-                                        📅 add to google calendar
-                                      </a>
-                                      <button onClick={()=>cancelSignup(day,shift)} className="btn btn-ghost" style={{width:"100%",fontSize:11,padding:"7px"}}>cancel signup</button>
-                                    </div>
-                                  : <button onClick={()=>signUp(day,shift)} className={`btn ${full?"btn-full":"btn-y"}`} disabled={!staffName||full} style={{width:"100%",fontSize:full||staffName?12:9,padding:"9px"}}>
-                                      {full ? "shift full" : staffName ? "sign up ✦" : "pick your name first"}
-                                    </button>
-                                }
-                              </div>
-                            </div>
-                          );
-                        })
-                    }
-                  </div>
-                );
-              })}
+                  );
+                })}
               </div>
             ))}
           </div>
         )}
       </main>
 
-      {/* Footer */}
       <div style={{marginTop:48}}>
         <Checkers c1={C.yellow} c2={C.deep} size={12} opacity={0.6}/>
       </div>
