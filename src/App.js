@@ -122,7 +122,7 @@ function Checkers({ c1 = C.yellow, c2 = C.deep, size = 16, opacity = 1 }) {
 
 export default function CornerCafe() {
   const [view, setView] = useState("calendar");
-  const [weekOffset, setWeekOffset] = useState(0);
+  const [weekOffset, setWeekOffset] = useState(new Date().getDay() === 0 ? 1 : 0);
   const [staffName, setStaffName] = useState("");
   const [nameInput, setNameInput] = useState("");
   const [pinInput, setPinInput] = useState("");
