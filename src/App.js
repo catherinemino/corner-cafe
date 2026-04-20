@@ -164,7 +164,13 @@ export default function CornerCafe() {
     setTimeout(() => setToast(null), 2400);
   };
 
-  const saveData = useCallback(async nd => { setData(nd); await dbSet("cc_data", JSON.stringify(nd)); }, []);
+ const saveData = useCallback(async nd => {
+  setData(nd);
+  const latest = await dbGet("cc_data");
+  const latestData = latest ? JSON.parse(latest) : {};
+  const merged = { ...latestData, ...nd };
+  await dbSet("cc_data", JSON.stringify(merged));
+}, []);
   const saveShiftsConfig = useCallback(async nc => { setShiftsConfig(nc); await dbSet("cc_shifts", JSON.stringify(nc)); }, []);
   const saveStaffList = useCallback(async sl => { setStaffList(sl); await dbSet("cc_staff", JSON.stringify(sl)); }, []);
 
