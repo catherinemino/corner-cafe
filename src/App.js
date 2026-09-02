@@ -251,20 +251,27 @@ export default function CornerCafe() {
   };
 
   const getMonthlyTally = () => {
+    c  const getMonthlyTally = () => {
     const byMonth = {};
     const allTimeMonths = new Set();
     Object.entries(data).forEach(([wk, wd]) => {
-      // Parse month from key format "week_YYYY-MM-DD"
+      // Parse the Monday date from the week key
       const datePart = wk.replace("week_", "");
       const parts = datePart.split("-");
-      if (parts.length >= 2) {
-        const month = `${parts[0]}-${parts[1]}`;
+      if (parts.length < 3) return;
+      const monday = new Date(parseInt(parts[0]), parseInt(parts[1])-1, parseInt(parts[2]));
+      // For each day in the week, calculate the actual date and use ITS month
+      Object.entries(wd).forEach(([day, dd]) => {
+        const dayIndex = DAYS.indexOf(day);
+        if (dayIndex === -1) return;
+        const actualDate = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + dayIndex);
+        const month = `${actualDate.getFullYear()}-${String(actualDate.getMonth()+1).padStart(2,"0")}`;
         allTimeMonths.add(month);
         if (!byMonth[month]) byMonth[month] = {};
-        Object.values(wd).forEach(dd => Object.values(dd).forEach(ss => ss.forEach(s => {
+        Object.values(dd).forEach(ss => ss.forEach(s => {
           if (s.verified) byMonth[month][s.name] = (byMonth[month][s.name] || 0) + 1;
-        })));
-      }
+        }));
+      });
     });
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
