@@ -251,7 +251,6 @@ export default function CornerCafe() {
   };
 
   const getMonthlyTally = () => {
-    c  const getMonthlyTally = () => {
     const byMonth = {};
     const allTimeMonths = new Set();
     Object.entries(data).forEach(([wk, wd]) => {
