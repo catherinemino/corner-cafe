@@ -227,12 +227,12 @@ export default function CornerCafe() {
       setBasicsError("can't reach the server right now");
     }
   };
-  useEffect(() => { loadBasics(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadBasics(); }, []);
   useEffect(() => {
     if (basicsLoaded) return undefined;
     const id = setInterval(loadBasics, 5000);
     return () => clearInterval(id);
-  }, [basicsLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [basicsLoaded]);
 
   // ── the viewed week: load now, then refresh every 15s and whenever the tab comes back ──
   useEffect(() => {
